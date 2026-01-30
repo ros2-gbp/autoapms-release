@@ -1,0 +1,12 @@
+Source: ros-kilted-auto-apms-ros2behavior
+Section: misc
+Priority: optional
+Maintainer: Robin Müller <mue.robin@icloud.com>
+Build-Depends: debhelper (>= 9.0.0), python3-pytest <!nocheck>, ros-kilted-ament-copyright <!nocheck>, ros-kilted-ament-index-python, ros-kilted-auto-apms-behavior-tree, ros-kilted-auto-apms-interfaces, ros-kilted-rcl-interfaces, ros-kilted-rclpy, ros-kilted-ros2cli, ros-kilted-ros2param, ros-kilted-ros2run, ros-kilted-std-srvs, ros-kilted-ros-workspace, python3-all, python3-setuptools, dh-python
+Homepage: https://autoapms.github.io/auto-apms-guide/
+Standards-Version: 3.9.2
+
+Package: ros-kilted-auto-apms-ros2behavior
+Architecture: any
+Depends: ${python3:Depends}, ${misc:Depends}, ros-kilted-ament-index-python, ros-kilted-auto-apms-behavior-tree, ros-kilted-auto-apms-interfaces, ros-kilted-rcl-interfaces, ros-kilted-rclpy, ros-kilted-ros2cli, ros-kilted-ros2param, ros-kilted-ros2run, ros-kilted-std-srvs, ros-kilted-ros-workspace
+Description: AutoAPMS related extensions for the ROS 2 CLI introducing the ros2 behavior command
