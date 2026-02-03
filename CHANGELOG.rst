@@ -2,6 +2,9 @@
 Changelog for package auto_apms_util
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.4.1 (2026-02-03)
+------------------
+
 1.4.0 (2026-01-30)
 ------------------
 * Fix version number to match last release
