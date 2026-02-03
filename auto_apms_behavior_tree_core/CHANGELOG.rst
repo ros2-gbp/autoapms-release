@@ -2,6 +2,15 @@
 Changelog for package auto_apms_behavior_tree_core
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.4.1 (2026-02-03)
+------------------
+* fix: complete type for SubTree when including tree_document.hpp
+* Fix issue that leads to segfaults when loading behavior tree node plugins from libraries that have been built using link-time optimization (LTO) as in the ROS 2 build farm
+* Contributors: Robin Müller
+
+* Fix issue that leads to segfaults when loading behavior tree node plugins from libraries that have been built using link-time optimization (LTO) as in the ROS 2 build farm
+* Contributors: Robin Müller
+
 1.4.0 (2026-01-30)
 ------------------
 * Feat: Enable to use the CLI to define behaviors dynamically (`#14 <https://github.com/AutoAPMS/auto-apms/issues/14>`_)
