@@ -2,6 +2,12 @@
 Changelog for package auto_apms_behavior_tree_core
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.4.2 (2026-02-03)
+------------------
+* Remove dependency for eigen3_cmake_module
+* Remove tinyxml2_vendor in favor of system dependency
+* Contributors: Robin Müller
+
 1.4.1 (2026-02-03)
 ------------------
 * fix: complete type for SubTree when including tree_document.hpp
