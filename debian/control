@@ -1,0 +1,12 @@
+Source: ros-jazzy-auto-apms-behavior-tree
+Section: misc
+Priority: optional
+Maintainer: Robin Müller <mue.robin@icloud.com>
+Build-Depends: debhelper (>= 9.0.0), ros-jazzy-ament-cmake, ros-jazzy-ament-cmake-copyright <!nocheck>, ros-jazzy-ament-cmake-python, ros-jazzy-ament-index-python, ros-jazzy-auto-apms-behavior-tree-core, ros-jazzy-auto-apms-interfaces, ros-jazzy-auto-apms-util, ros-jazzy-generate-parameter-library, ros-jazzy-geometry-msgs, ros-jazzy-rcl-interfaces, ros-jazzy-rclcpp, ros-jazzy-rclcpp-action, ros-jazzy-rclcpp-components, ros-jazzy-std-srvs, ros-jazzy-tf2-geometry-msgs, ros-jazzy-tinyxml2-vendor, ros-jazzy-ros-workspace
+Homepage: https://autoapms.github.io/auto-apms-guide/
+Standards-Version: 3.9.2
+
+Package: ros-jazzy-auto-apms-behavior-tree
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-jazzy-ament-index-python, ros-jazzy-auto-apms-behavior-tree-core, ros-jazzy-auto-apms-interfaces, ros-jazzy-auto-apms-util, ros-jazzy-generate-parameter-library, ros-jazzy-geometry-msgs, ros-jazzy-rcl-interfaces, ros-jazzy-rclcpp, ros-jazzy-rclcpp-action, ros-jazzy-rclcpp-components, ros-jazzy-rclpy, ros-jazzy-ros2cli, ros-jazzy-ros2param, ros-jazzy-std-srvs, ros-jazzy-tf2-geometry-msgs, ros-jazzy-tinyxml2-vendor, ros-jazzy-ros-workspace
+Description: Standard AutoAPMS behavior tree nodes and deployment tools
