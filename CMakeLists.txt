@@ -56,6 +56,7 @@ add_library(${PROJECT_NAME} SHARED
   "src/node/node_manifest.cpp"
   "src/node/ros_node_context.cpp"
   "src/node/node_registration_loader.cpp"
+  "src/node/node_registration_from_library_adapter.cpp"
   "src/tree/script.cpp"
   "src/tree/tree_resource.cpp"
   "src/tree/tree_document.cpp"
@@ -129,6 +130,16 @@ target_link_libraries(create_node_model_header ${PROJECT_NAME})
 add_executable(create_node_reference_markdown "src/cli/create_node_reference_markdown.cpp")
 target_link_libraries(create_node_reference_markdown ${PROJECT_NAME})
 
+### Quick test utilities to be used manually (not installed or exported) for debugging and development purposes
+
+# Quick test utility to print node manifest identities
+add_executable(test_print_node_manifest_identities "test/test_print_node_manifest_identities.cpp")
+target_link_libraries(test_print_node_manifest_identities ${PROJECT_NAME})
+
+# Quick test utility to print behavior resource identities
+add_executable(test_print_behavior_identities "test/test_print_behavior_identities.cpp")
+target_link_libraries(test_print_behavior_identities ${PROJECT_NAME})
+
 #
 # ------------ Testing --------------
 #
@@ -143,6 +154,7 @@ if(BUILD_TESTING)
   ament_add_gtest(${PROJECT_NAME}_unit_tests
     "test/unit/node_manifest.cpp"
     "test/unit/ros_subscriber_node.cpp"
+    "test/unit/tree_document_node_element.cpp"
     "test/unit/tree_document_node_model.cpp"
     "test/unit/tree_document_recursive_include.cpp"
     "test/unit/tree_document_tree_generation.cpp"
