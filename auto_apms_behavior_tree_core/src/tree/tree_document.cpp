@@ -124,7 +124,7 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertNode(
 {
   if (const std::set<std::string> names = doc_ptr_->getRegisteredNodeNames(true); names.find(name) == names.end()) {
     throw exceptions::TreeDocumentError(
-      "Cannot insert unkown node <" + name +
+      "Cannot insert unknown node <" + name +
       ">. Before inserting a new node, the associated document must register the corresponding behavior tree "
       "node. Consider using a signature of insertNode() that does this automatically.");
   }
@@ -255,7 +255,7 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromDocument(
       for (const NodeElement & ele : found) names.push_back(ele.getFullyQualifiedName());
       throw exceptions::TreeDocumentError(
         "Cannot insert tree '" + tree_name + "' because the following nodes found in tree '" + name +
-        "' are unkown to the builder:\n\t- " + auto_apms_util::join(names, "\n\t- "));
+        "' are unknown to the builder:\n\t- " + auto_apms_util::join(names, "\n\t- "));
     }
   }
 
@@ -336,17 +336,23 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromResource(
 bool TreeDocument::NodeElement::hasChildren() const { return ele_ptr_->FirstChild() == nullptr ? false : true; }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::getFirstNode(
-  const std::string & registration_name, const std::string & instance_name) const
+  const std::string & registration_name, const std::string & instance_name, bool deep_search) const
 {
   if (registration_name.empty() && instance_name.empty()) return NodeElement(doc_ptr_, ele_ptr_->FirstChildElement());
 
-  // If name is given, recursively search for the first node with this name
   ConstDeepApplyCallback apply = [&registration_name, &instance_name](const NodeElement & ele) {
     if (registration_name.empty()) return ele.getName() == instance_name;
     if (instance_name.empty()) return ele.getRegistrationName() == registration_name;
     return ele.getRegistrationName() == registration_name && ele.getName() == instance_name;
   };
-  if (const std::vector<NodeElement> found = deepApplyConst(apply); !found.empty()) return found[0];
+
+  if (deep_search) {
+    if (const std::vector<NodeElement> found = deepApplyConst(apply); !found.empty()) return found[0];
+  } else {
+    for (auto child : *this) {
+      if (apply(child)) return child;
+    }
+  }
 
   // Cannot find node in children of this
   throw exceptions::TreeDocumentError(
@@ -355,9 +361,10 @@ TreeDocument::NodeElement TreeDocument::NodeElement::getFirstNode(
 }
 
 TreeDocument::NodeElement & TreeDocument::NodeElement::removeFirstChild(
-  const std::string & registration_name, const std::string & instance_name)
+  const std::string & registration_name, const std::string & instance_name, bool deep_search)
 {
-  ele_ptr_->DeleteChild(getFirstNode(registration_name, instance_name).ele_ptr_);
+  XMLElement * found = getFirstNode(registration_name, instance_name, deep_search).ele_ptr_;
+  found->Parent()->DeleteChild(found);
   return *this;
 }
 
@@ -383,14 +390,14 @@ TreeDocument::NodeElement::PortValues TreeDocument::NodeElement::getPorts() cons
 TreeDocument::NodeElement & TreeDocument::NodeElement::setPorts(const PortValues & port_values)
 {
   // Verify port_values
-  std::vector<std::string> unkown_keys;
+  std::vector<std::string> unknown_keys;
   for (const auto & [key, _] : port_values) {
-    if (!auto_apms_util::contains(port_names_, key)) unkown_keys.push_back(key);
+    if (!auto_apms_util::contains(port_names_, key)) unknown_keys.push_back(key);
   }
-  if (!unkown_keys.empty()) {
+  if (!unknown_keys.empty()) {
     throw exceptions::TreeDocumentError(
       "Cannot set ports. According to the node model, the following ports are not implemented by '" +
-      std::string(ele_ptr_->Name()) + "': [ " + auto_apms_util::join(unkown_keys, ", ") + " ].");
+      std::string(ele_ptr_->Name()) + "': [ " + auto_apms_util::join(unknown_keys, ", ") + " ].");
   }
 
   // Populate attributes according to the content of port_values
@@ -448,6 +455,8 @@ std::string TreeDocument::NodeElement::getFullyQualifiedName() const
 }
 
 const TreeDocument & TreeDocument::NodeElement::getParentDocument() const { return *doc_ptr_; }
+
+TreeDocument::XMLElement * TreeDocument::NodeElement::getXMLElement() { return ele_ptr_; }
 
 const std::vector<TreeDocument::NodeElement> TreeDocument::NodeElement::deepApplyConst(
   ConstDeepApplyCallback apply_callback) const
@@ -529,6 +538,48 @@ void TreeDocument::NodeElement::deepApplyImpl(
   }
 }
 
+TreeDocument::NodeElement::ChildIterator::ChildIterator() : doc_ptr_(nullptr), current_(nullptr) {}
+
+TreeDocument::NodeElement::ChildIterator::ChildIterator(TreeDocument * doc_ptr, tinyxml2::XMLElement * current)
+: doc_ptr_(doc_ptr), current_(current)
+{
+}
+
+TreeDocument::NodeElement::ChildIterator::value_type TreeDocument::NodeElement::ChildIterator::operator*() const
+{
+  return NodeElement(doc_ptr_, current_);
+}
+
+TreeDocument::NodeElement::ChildIterator & TreeDocument::NodeElement::ChildIterator::operator++()
+{
+  if (current_) current_ = current_->NextSiblingElement();
+  return *this;
+}
+
+TreeDocument::NodeElement::ChildIterator TreeDocument::NodeElement::ChildIterator::operator++(int)
+{
+  ChildIterator tmp = *this;
+  ++(*this);
+  return tmp;
+}
+
+bool TreeDocument::NodeElement::ChildIterator::operator==(const ChildIterator & other) const
+{
+  return current_ == other.current_;
+}
+
+bool TreeDocument::NodeElement::ChildIterator::operator!=(const ChildIterator & other) const
+{
+  return current_ != other.current_;
+}
+
+TreeDocument::NodeElement::ChildIterator TreeDocument::NodeElement::begin() const
+{
+  return ChildIterator(doc_ptr_, ele_ptr_->FirstChildElement());
+}
+
+TreeDocument::NodeElement::ChildIterator TreeDocument::NodeElement::end() const { return ChildIterator(); }
+
 TreeDocument::TreeElement::TreeElement(TreeDocument * doc_ptr, XMLElement * ele_ptr) : NodeElement(doc_ptr, ele_ptr)
 {
   if (!ele_ptr->Attribute(TREE_NAME_ATTRIBUTE_NAME)) {
@@ -559,7 +610,7 @@ TreeDocument::TreeElement & TreeDocument::TreeElement::setName(const std::string
 std::string TreeDocument::TreeElement::getName() const
 {
   if (const char * name = ele_ptr_->Attribute(TREE_NAME_ATTRIBUTE_NAME)) return name;
-  return "unkown";
+  return "unknown";
 }
 
 TreeDocument::TreeElement & TreeDocument::TreeElement::makeRoot()
@@ -603,9 +654,9 @@ std::string TreeDocument::TreeElement::writeToString() const
 }
 
 TreeDocument::TreeElement & TreeDocument::TreeElement::removeFirstChild(
-  const std::string & registration_name, const std::string & instance_name)
+  const std::string & registration_name, const std::string & instance_name, bool deep_search)
 {
-  NodeElement::removeFirstChild(registration_name, instance_name);
+  NodeElement::removeFirstChild(registration_name, instance_name, deep_search);
   return *this;
 }
 
@@ -1254,7 +1305,7 @@ NodeModelMap TreeDocument::getNodeModel(tinyxml2::XMLDocument & doc, const NodeM
         port_info.port_direction = BT::PortDirection::INOUT;
       } else {
         throw exceptions::TreeDocumentError(
-          "Unkown port direction in node model for '" + std::string(node_name) + "': " + direction);
+          "Unknown port direction in node model for '" + std::string(node_name) + "': " + direction);
       }
       if (const char * c = port_ele->Attribute("name")) {
         port_info.port_name = c;
@@ -1365,10 +1416,17 @@ void TreeDocument::writeToFile(const std::string & path) const
 
 TreeDocument & TreeDocument::reset()
 {
+  // Reset XML document
   Clear();
   tinyxml2::XMLElement * root_ele = NewElement(TreeDocument::ROOT_ELEMENT_NAME);
   root_ele->SetAttribute(TreeDocument::BTCPP_FORMAT_ATTRIBUTE_NAME, format_version_.c_str());
   InsertFirstChild(root_ele);
+
+  // Reset node registrations
+  for (const auto & node_name : getRegisteredNodeNames(false)) {
+    factory_.unregisterBuilder(node_name);
+  }
+  registered_nodes_manifest_ = NodeManifest();
   return *this;
 }
 
