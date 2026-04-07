@@ -1,0 +1,12 @@
+Source: ros-rolling-auto-apms-interfaces
+Section: misc
+Priority: optional
+Maintainer: Robin Müller <mue.robin@icloud.com>
+Build-Depends: debhelper (>= 9.0.0), ros-rolling-ament-cmake, ros-rolling-ament-cmake-copyright <!nocheck>, ros-rolling-rosidl-default-generators, ros-rolling-ros-workspace, ros-rolling-rosidl-typesupport-fastrtps-c, ros-rolling-rosidl-typesupport-fastrtps-cpp
+Homepage: https://autoapms.github.io/auto-apms-guide/
+Standards-Version: 3.9.2
+
+Package: ros-rolling-auto-apms-interfaces
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-rolling-ros-workspace
+Description: ROS 2 interfaces for AutoAPMS
