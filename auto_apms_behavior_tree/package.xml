@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>auto_apms_behavior_tree</name>
-  <version>1.5.0</version>
+  <version>1.5.1</version>
   <description>Standard AutoAPMS behavior tree nodes and deployment tools</description>
   <maintainer email="mue.robin@icloud.com">Robin Müller</maintainer>
   <license>Apache-2.0</license>
@@ -29,6 +29,8 @@
   <exec_depend>ros2param</exec_depend>
 
   <test_depend>ament_cmake_copyright</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
