@@ -1,1 +1,1 @@
-{"base": "e325fe2909f4", "parent": "debian/rolling/auto_apms_interfaces", "previous": "60b51a37c94a", "trim": "", "trimbase": ""}
+{"base": "78584bc", "parent": "debian/lyrical/auto_apms_interfaces", "previous": "d922e4d", "trim": "", "trimbase": ""}
