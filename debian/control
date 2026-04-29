@@ -1,0 +1,12 @@
+Source: ros-lyrical-auto-apms-mission
+Section: misc
+Priority: optional
+Maintainer: Robin Müller <mue.robin@icloud.com>
+Build-Depends: debhelper (>= 9.0.0), ros-lyrical-ament-cmake, ros-lyrical-ament-cmake-copyright <!nocheck>, ros-lyrical-auto-apms-behavior-tree, ros-lyrical-auto-apms-util, ros-lyrical-rclcpp-components, ros-lyrical-ros-workspace
+Homepage: https://autoapms.github.io/auto-apms-guide/
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-auto-apms-mission
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-lyrical-auto-apms-behavior-tree, ros-lyrical-auto-apms-util, ros-lyrical-rclcpp-components, ros-lyrical-ros-workspace
+Description: Implementation of AutoAPMS's automated mission management system
