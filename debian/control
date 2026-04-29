@@ -1,0 +1,12 @@
+Source: ros-lyrical-auto-apms-examples
+Section: misc
+Priority: optional
+Maintainer: Robin Müller <mue.robin@icloud.com>
+Build-Depends: debhelper (>= 9.0.0), ros-lyrical-ament-cmake, ros-lyrical-ament-cmake-copyright <!nocheck>, ros-lyrical-auto-apms-behavior-tree, ros-lyrical-auto-apms-interfaces, ros-lyrical-auto-apms-mission, ros-lyrical-auto-apms-ros2behavior, ros-lyrical-auto-apms-util, ros-lyrical-rclcpp-components, ros-lyrical-ros-workspace
+Homepage: https://autoapms.github.io/auto-apms-guide/
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-auto-apms-examples
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-lyrical-auto-apms-behavior-tree, ros-lyrical-auto-apms-interfaces, ros-lyrical-auto-apms-mission, ros-lyrical-auto-apms-ros2behavior, ros-lyrical-auto-apms-util, ros-lyrical-rclcpp-components, ros-lyrical-ros-workspace
+Description: Examples package for AutoAPMS
