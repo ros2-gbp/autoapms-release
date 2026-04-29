@@ -1,0 +1,12 @@
+Source: ros-lyrical-auto-apms-ros2behavior
+Section: misc
+Priority: optional
+Maintainer: Robin Müller <mue.robin@icloud.com>
+Build-Depends: debhelper (>= 9.0.0), python3-pytest <!nocheck>, ros-lyrical-ament-copyright <!nocheck>, ros-lyrical-ament-index-python, ros-lyrical-auto-apms-behavior-tree, ros-lyrical-auto-apms-interfaces, ros-lyrical-rcl-interfaces, ros-lyrical-rclpy, ros-lyrical-ros2cli, ros-lyrical-ros2param, ros-lyrical-ros2run, ros-lyrical-std-srvs, ros-lyrical-ros-workspace, python3-all, python3-setuptools, dh-python
+Homepage: https://autoapms.github.io/auto-apms-guide/
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-auto-apms-ros2behavior
+Architecture: any
+Depends: ${python3:Depends}, ${misc:Depends}, ros-lyrical-ament-index-python, ros-lyrical-auto-apms-behavior-tree, ros-lyrical-auto-apms-interfaces, ros-lyrical-rcl-interfaces, ros-lyrical-rclpy, ros-lyrical-ros2cli, ros-lyrical-ros2param, ros-lyrical-ros2run, ros-lyrical-std-srvs, ros-lyrical-ros-workspace
+Description: AutoAPMS related extensions for the ROS 2 CLI introducing the ros2 behavior command
