@@ -18,7 +18,7 @@ package_name = "auto_apms_ros2behavior"
 
 setup(
     name=package_name,
-    version="1.5.1",
+    version="1.6.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
@@ -30,7 +30,9 @@ setup(
     maintainer_email="mue.robin@icloud.com",
     description="AutoAPMS related extensions for the ROS 2 CLI",
     license="Apache-2.0",
-    tests_require=["pytest"],
+    extras_require={
+        "test": ["pytest"],
+    },
     entry_points={
         "ros2cli.command": [
             "behavior = auto_apms_ros2behavior.command.behavior:BehaviorCommand",
