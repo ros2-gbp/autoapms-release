@@ -25,9 +25,6 @@ This project adopts the behavior tree implementation provided by [BehaviorTree.C
 
 The intention of this project is to make it significantly more user-friendly and less error prone to develop autonomous robotics with behavior trees. The core packages are written in C++ and a supplementary Python API exposes high-level features for scripting.
 
-> [!NOTE]
-> Currently we support **Linux only**!.
-
 ## ✨ Highlights
 
 Here are some of the most prominent features offered by this repository:
@@ -46,13 +43,47 @@ Here are some of the most prominent features offered by this repository:
 
 - `ros2 behavior` command extending the ROS2 CLI for behavior management
 
-- Abstractions for PX4 Autopilot available with [auto-apms-px4](https://github.com/autoapms/auto-apms-px4)
+- Comprehensive [User Guide](https://autoapms.github.io/auto-apms-guide/) and [API Docs](https://autoapms.github.io/auto-apms/)
 
-- Comprehensive [user guide](https://autoapms.github.io/auto-apms-guide/) and [API documentation](https://autoapms.github.io/auto-apms/)
+- Web-based behavior tree editor and deployment tool [AutoAPMS Studio](https://github.com/AutoAPMS/auto_apms_studio)
 
 ## 🚀 Getting Started
 
 The following installation guide helps you getting started with AutoAPMS.
+
+<details open>
+
+<summary>Recommended: Install debian packages</summary>
+
+**Core API**
+
+```bash
+sudo apt install ros-$ROS_DISTRO-auto-apms-behavior-tree-core
+```
+
+**Standard Nodes & Behavior Executor**
+
+```bash
+sudo apt install ros-$ROS_DISTRO-auto-apms-behavior-tree
+```
+
+**CLI Tooling**
+
+```bash
+sudo apt install ros-$ROS_DISTRO-auto-apms-ros2behavior
+```
+
+**Examples**
+
+```bash
+sudo apt install ros-$ROS_DISTRO-auto-apms-examples
+```
+
+</details>
+
+<details>
+
+<summary>Alternative: Build from source</summary>
 
 1. Create a [ROS 2 workspace](https://docs.ros.org/en/humble/Tutorials/Beginner-Client-Libraries/Creating-A-Workspace/Creating-A-Workspace.html) and clone this repository
 
@@ -75,16 +106,18 @@ The following installation guide helps you getting started with AutoAPMS.
     colcon build --packages-up-to auto_apms_examples --symlink-install
     ```
 
-1. Run your first behavior using `ros2 behavior`. This is an extension of the ROS 2 CLI introduced by the `auto_apms_ros2behavior` package
+</details>
 
-    ```bash
-    source install/setup.bash
-    ros2 behavior run auto_apms_examples::demo::HelloWorld --blackboard name:=Turtle
-    ```
+### Try it out
 
-### Check out the demo using [pyrobosim](https://github.com/sea-bass/pyrobosim)
+Run your first behavior using `ros2 behavior`. This is an extension of the ROS 2 CLI introduced by the `auto_apms_ros2behavior` package
 
-We provide a guide for running a cool **visual demonstration** on complex behaviors created with AutoAPMS in the [auto_apms_simulation](https://github.com/AutoAPMS/auto_apms_simulation) repository.
+```bash
+source install/setup.bash
+ros2 behavior run auto_apms_examples::demo::HelloWorld --blackboard name:=Turtle
+```
+
+Or check out the demo using [pyrobosim](https://github.com/sea-bass/pyrobosim) on complex behaviors created with AutoAPMS in the [auto_apms_simulation](https://github.com/AutoAPMS/auto_apms_simulation) repository.
 
 ## 🎓 Documentation
 
@@ -153,11 +186,11 @@ doxygen doc/Doxyfile
 
 ## ⭐ Star History
 
-<a href="https://www.star-history.com/#AutoAPMS/auto-apms&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=AutoAPMS%2Fauto-apms&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=AutoAPMS/auto-apms&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=AutoAPMS/auto-apms&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=AutoAPMS/auto-apms&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AutoAPMS/auto-apms&type=date&theme=dark&legend=top-left&sealed_token=2M2YDQoWvpKag320EjOcxfnSVrHXhcpnHl2J8VbJkz7D1uHvA8qiGgib1oUfEFwfJ7D6a5OqnCgdGmP3bpwvV-opXcYggYk4cBvMqNihoOQlJPUhGARlz6DvNtFYoIFrLd2y24BYcHGyb2sQTW3_H0PhVkLqMNQcL4IS2UwjeHPmiqCb9lN_-ttiya3r" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AutoAPMS/auto-apms&type=date&legend=top-left&sealed_token=2M2YDQoWvpKag320EjOcxfnSVrHXhcpnHl2J8VbJkz7D1uHvA8qiGgib1oUfEFwfJ7D6a5OqnCgdGmP3bpwvV-opXcYggYk4cBvMqNihoOQlJPUhGARlz6DvNtFYoIFrLd2y24BYcHGyb2sQTW3_H0PhVkLqMNQcL4IS2UwjeHPmiqCb9lN_-ttiya3r" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AutoAPMS/auto-apms&type=date&legend=top-left&sealed_token=2M2YDQoWvpKag320EjOcxfnSVrHXhcpnHl2J8VbJkz7D1uHvA8qiGgib1oUfEFwfJ7D6a5OqnCgdGmP3bpwvV-opXcYggYk4cBvMqNihoOQlJPUhGARlz6DvNtFYoIFrLd2y24BYcHGyb2sQTW3_H0PhVkLqMNQcL4IS2UwjeHPmiqCb9lN_-ttiya3r" />
  </picture>
 </a>
 
