@@ -241,7 +241,7 @@ def sync_run_generic_behavior_with_executor(
     executor_node_name: str | None = None,
     static_params: dict = None,
     blackboard_params: dict = None,
-    keep_blackboard: bool = False,
+    clear_blackboard: bool = False,
     logging_level: LoggingSeverity = None,
 ):
     """
@@ -258,24 +258,25 @@ def sync_run_generic_behavior_with_executor(
             by the behavior.
         executor_node_name: Name of the behavior tree executor node (e.g. 'my_executor').
             If specified, the function will attempt to configure the node before execution.
-            If None, `static_params`, `blackboard_params`, `keep_blackboard` and `logging_level` arguments will be
+            If None, `static_params`, `blackboard_params`, `clear_blackboard` and `logging_level` arguments will be
             ignored.
         static_params: Static parameters to set on the executor
         blackboard_params: Blackboard parameters to set on the executor
-        keep_blackboard: Do not clear the blackboard before execution
+        clear_blackboard: Clear the blackboard before execution
         logging_level: Logger level to set on the executor
     """
     with DirectNode(None, node_name=GENERIC_NODE_NAME) as node:
         node.get_logger().info(f"Targeting behavior execution action '{action_name}'")
 
-        timeout_sec = 5.0
+        min_timeout_sec = 5.0
+        timeout_sec = min_timeout_sec
         if executor_node_name:
-            node.get_logger().info(f"Configuring executor node '{executor_node_name}'")
+            node.get_logger().info(f"Targeting executor node '{executor_node_name}'")
             # Set logger level if requested
             if logging_level is not None:
                 call_set_logger_level(node, executor_node_name, logging_level)
-            # Clear blackboard if not instructed otherwise
-            if not keep_blackboard:
+            # Clear blackboard if instructed to do so
+            if clear_blackboard:
                 call_clear_blackboard_for_executor(node, executor_node_name)
             # Set parameters before sending the goal
             if static_params or blackboard_params:
@@ -286,8 +287,13 @@ def sync_run_generic_behavior_with_executor(
                 response: GetParameters.Response = call_get_parameters(
                     node=node, node_name=executor_node_name, parameter_names=["tick_rate"]
                 )
-                tick_rate = get_value(parameter_value=response.values[0])
-            timeout_sec = max(tick_rate * 2.5, 5.0)
+                if len(response.values) == 0:
+                    tick_rate = 0.1
+                else:
+                    tick_rate = get_value(parameter_value=response.values[0])
+
+            # Set timeout based on tick rate, but at least min_timeout_sec
+            timeout_sec = max(tick_rate * 2.5, min_timeout_sec)
 
         return call_start_tree_action(
             node,
@@ -302,34 +308,38 @@ def sync_run_generic_behavior_with_executor(
 
 
 def sync_run_behavior_resource_with_executor(
-    executor_name: str,
+    action_name: str,
     behavior: BehaviorResource | None,
+    executor_node_name: str | None = None,
     static_params: dict = None,
     blackboard_params: dict = None,
-    keep_blackboard: bool = False,
+    clear_blackboard: bool = False,
     logging_level: LoggingSeverity = None,
 ):
     """
     Execute a behavior on a remote executor node.
 
     Args:
-        executor_name: Name of the behavior tree executor
+        action_name: Name of the StartTreeExecutor action to call for starting the behavior execution
+            (e.g. '/my_executor/start_tree_executor).
         behavior: A valid behavior resource or None for letting the build handler
             decide how to build the tree without a specific build request
+        executor_node_name: Name of the behavior tree executor node (e.g. 'my_executor').
         static_params: Static parameters to set on the executor
         blackboard_params: Blackboard parameters to set on the executor
-        keep_blackboard: Do not clear the blackboard before execution
+        clear_blackboard: Clear the blackboard before execution
         logging_level: Logger level to set on the executor
     """
     return sync_run_generic_behavior_with_executor(
-        executor_name=executor_name,
+        action_name=action_name,
         build_request=behavior.build_request if behavior else None,
         build_handler=behavior.default_build_handler if behavior else None,
         entry_point=behavior.entry_point if behavior else None,
         node_manifest=behavior.node_manifest if behavior else None,
+        executor_node_name=executor_node_name,
         static_params=static_params,
         blackboard_params=blackboard_params,
-        keep_blackboard=keep_blackboard,
+        clear_blackboard=clear_blackboard,
         logging_level=logging_level,
     )
 
@@ -342,6 +352,7 @@ def sync_run_generic_behavior_locally(
     static_params: dict = None,
     blackboard_params: dict = None,
     logging_level: LoggingSeverity = None,
+    namespace: str | None = None,
 ):
     """
     Execute a behavior locally using the run_behavior executable.
@@ -356,6 +367,7 @@ def sync_run_generic_behavior_locally(
         static_params: Static parameters to set on the executor
         blackboard_params: Blackboard parameters to set on the executor
         logging_level: Logger level to set on the executor
+        namespace: Optional ROS 2 node namespace to run the executor under
     """
     required_package = "auto_apms_behavior_tree"
     required_command = "run_behavior"
@@ -372,19 +384,23 @@ def sync_run_generic_behavior_locally(
         argv.append(f"--{arg_name}")
         argv.append(f"{arg_tuple[0]}:={arg_tuple[1]}")
 
+    if namespace:
+        add_ros_argument("remap", ("__ns", namespace if namespace.startswith("/") else f"/{namespace}"))
+
     if logging_level:
-        add_ros_argument("log-level", (required_command, logging_level.name))
+        add_ros_argument(
+            "log-level", (f"{namespace}.{required_command}" if namespace else required_command, logging_level.name)
+        )
 
     # Add static parameter for setting the build handler
     if build_handler:
         # We override the build handler that might be passed via this dict with the value of the dedicated argument
         static_params["build_handler"] = build_handler
 
-    if static_params or blackboard_params:
-        for tup in static_params.items():
-            add_ros_argument("param", tup)
-        for k, v in (blackboard_params or {}).items():
-            add_ros_argument("param", (f"bb.{k}", v))
+    for tup in (static_params or {}).items():
+        add_ros_argument("param", tup)
+    for k, v in (blackboard_params or {}).items():
+        add_ros_argument("param", (f"bb.{k}", v))
 
     return run_executable(
         path=get_executable_path(
@@ -426,6 +442,7 @@ def sync_run_tree_node_locally(
     registration_options: dict,
     port_values: dict = None,
     logging_level: LoggingSeverity = None,
+    namespace: str | None = None,
 ):
     """
     Run a tree node locally using the run_tree_node executable.
@@ -435,6 +452,7 @@ def sync_run_tree_node_locally(
         registration_params: YAML representation of NodeRegistrationOptions encoded in a string
         port_values: Optional YAML map of specific node port values encoded in a string
         logging_level: Logger level to set on the executor
+        namespace: Optional ROS 2 node namespace to run the node under
     """
     required_package = "auto_apms_behavior_tree"
     required_command = "run_tree_node"
@@ -452,8 +470,11 @@ def sync_run_tree_node_locally(
 
     add_ros_argument("remap", ("__node", node_name))
 
+    if namespace:
+        add_ros_argument("remap", ("__ns", namespace if namespace.startswith("/") else f"/{namespace}"))
+
     if logging_level:
-        add_ros_argument("log-level", (node_name, logging_level.name))
+        add_ros_argument("log-level", (f"{namespace}.{node_name}" if namespace else node_name, logging_level.name))
 
     return run_executable(
         path=get_executable_path(
