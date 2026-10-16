@@ -15,6 +15,7 @@
 #include "auto_apms_behavior_tree_core/tree/tree_document.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 
 #include "ament_index_cpp/get_package_share_directory.hpp"
@@ -189,7 +190,7 @@ model::SubTree TreeDocument::NodeElement::insertSubTreeNode(const TreeElement & 
 }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::insertTree(
-  const TreeElement & tree, const NodeElement * before_this)
+  const TreeElement & tree, const NodeElement * before_this, bool auto_register_nodes)
 {
   const XMLElement * root_child = tree.ele_ptr_->FirstChildElement();
   if (!root_child) {
@@ -200,12 +201,11 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertTree(
     throw exceptions::TreeDocumentError(
       "Cannot insert tree element '" + tree.getFullyQualifiedName() + "' because it has more than one child node.");
   }
-  doc_ptr_->registerNodes(tree.getRequiredNodeManifest());
-  return insertTreeFromDocument(*tree.doc_ptr_, tree.getName(), before_this);
+  return insertTreeFromDocument(*tree.doc_ptr_, tree.getName(), before_this, auto_register_nodes);
 }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromDocument(
-  const TreeDocument & doc, const std::string & tree_name, const NodeElement * before_this)
+  const TreeDocument & doc, const std::string & tree_name, const NodeElement * before_this, bool auto_register_nodes)
 {
   const std::vector<std::string> other_tree_names = doc.getAllTreeNames();
   if (other_tree_names.empty()) {
@@ -215,6 +215,13 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromDocument(
   if (!auto_apms_util::contains(other_tree_names, tree_name)) {
     throw exceptions::TreeDocumentError(
       "Cannot insert tree '" + tree_name + "' because document doesn't specify a tree with that name.");
+  }
+
+  if (auto_register_nodes) {
+    // We register all associated node plugins beforehand, so that the user doesn't have to do that manually. This
+    // means, that also potentially unused nodes are available and registered with the factory. This seems unnecessary,
+    // but it's very convenient and the performance probably doesn't suffer too much.
+    doc_ptr_->registerNodes(doc.getRequiredNodeManifest(tree_name), false);
   }
 
   // List including the target tree name and the names of its dependencies (Trees required by SubTree nodes)
@@ -276,9 +283,9 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromDocument(
 }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromDocument(
-  const TreeDocument & doc, const NodeElement * before_this)
+  const TreeDocument & doc, const NodeElement * before_this, bool auto_register_nodes)
 {
-  return insertTreeFromDocument(doc, doc.getRootTreeName(), before_this);
+  return insertTreeFromDocument(doc, doc.getRootTreeName(), before_this, auto_register_nodes);
 }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromString(
@@ -314,23 +321,18 @@ TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromFile(
 }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromResource(
-  const TreeResource & resource, const std::string & tree_name, const NodeElement * before_this)
+  const TreeResource & resource, const std::string & tree_name, const NodeElement * before_this,
+  bool auto_register_nodes)
 {
   TreeDocument insert_doc(doc_ptr_->format_version_, doc_ptr_->tree_node_loader_ptr_);
   insert_doc.mergeFile(resource.build_request_file_path_);
-
-  // We register all associated node plugins beforehand, so that the user doesn't have to do that manually. This means,
-  // that also potentially unused nodes are available and registered with the factory. This seems unnecessary, but it's
-  // very convenient and the performance probably doesn't suffer too much.
-  doc_ptr_->registerNodes(resource.getNodeManifest(), false);
-
-  return insertTreeFromDocument(insert_doc, tree_name, before_this);
+  return insertTreeFromDocument(insert_doc, tree_name, before_this, auto_register_nodes);
 }
 
 TreeDocument::NodeElement TreeDocument::NodeElement::insertTreeFromResource(
-  const TreeResource & resource, const NodeElement * before_this)
+  const TreeResource & resource, const NodeElement * before_this, bool auto_register_nodes)
 {
-  return insertTreeFromResource(resource, resource.getRootTreeName(), before_this);
+  return insertTreeFromResource(resource, resource.getRootTreeName(), before_this, auto_register_nodes);
 }
 
 bool TreeDocument::NodeElement::hasChildren() const { return ele_ptr_->FirstChild() == nullptr ? false : true; }
@@ -644,11 +646,11 @@ BT::Result TreeDocument::TreeElement::verify() const
   return doc.mergeTree(*this, true).verify();
 }
 
-std::string TreeDocument::TreeElement::writeToString() const
+std::string TreeDocument::TreeElement::writeToString(bool remove_whitespace) const
 {
   XMLDocument tree_doc;
   tree_doc.InsertEndChild(ele_ptr_->DeepClone(&tree_doc));
-  tinyxml2::XMLPrinter printer;
+  tinyxml2::XMLPrinter printer(nullptr, remove_whitespace);
   tree_doc.Print(&printer);
   return printer.CStr();
 }
@@ -745,13 +747,56 @@ TreeDocument & TreeDocument::mergeTreeDocumentImpl(
     TreeDocument include_doc(format_version_, tree_node_loader_ptr_);
     for (const XMLElement * include_ele = other_root->FirstChildElement(INCLUDE_ELEMENT_NAME); include_ele != nullptr;
          include_ele = include_ele->NextSiblingElement(INCLUDE_ELEMENT_NAME)) {
-      if (const char * path = include_ele->Attribute(INCLUDE_PATH_ATTRIBUTE_NAME)) {
+      const char * path = include_ele->Attribute(INCLUDE_PATH_ATTRIBUTE_NAME);
+      const char * resource_identity = include_ele->Attribute(INCLUDE_RESOURCE_ATTRIBUTE_NAME);
+
+      if (path && resource_identity) {
+        throw exceptions::TreeDocumentError(
+          "Cannot merge tree document: Found an <" + std::string(INCLUDE_ELEMENT_NAME) +
+          "> element that specifies both the '" + INCLUDE_PATH_ATTRIBUTE_NAME + "' and the '" +
+          INCLUDE_RESOURCE_ATTRIBUTE_NAME + "' attribute. Please specify only one of them.");
+      }
+
+      std::string absolute_path;
+      // For a resource include this holds the single tree to cherry-pick from the file; it stays empty for a path
+      // include, which merges the whole file.
+      std::string cherry_pick_tree_name;
+      if (resource_identity) {
+        // Resolve the include by looking up an installed tree resource by its identity. Unlike a file path, this
+        // decouples the include from any concrete install location: the resource system knows where the associated tree
+        // file lives. The 'ros_pkg' attribute is meaningless here (the package is already part of the identity).
+        if (std::string(resource_identity).empty()) {
+          throw exceptions::TreeDocumentError(
+            "Cannot merge tree document: Found an <" + std::string(INCLUDE_ELEMENT_NAME) +
+            "> element that specifies an empty resource identity in attribute '" + INCLUDE_RESOURCE_ATTRIBUTE_NAME +
+            "'.");
+        }
+        if (include_ele->Attribute(INCLUDE_ROS_PKG_ATTRIBUTE_NAME)) {
+          throw exceptions::TreeDocumentError(
+            "Cannot merge tree document: Found an <" + std::string(INCLUDE_ELEMENT_NAME) +
+            "> element that specifies the '" + INCLUDE_ROS_PKG_ATTRIBUTE_NAME + "' attribute together with '" +
+            INCLUDE_RESOURCE_ATTRIBUTE_NAME + "'. The '" + INCLUDE_ROS_PKG_ATTRIBUTE_NAME +
+            "' attribute is only allowed in combination with '" + INCLUDE_PATH_ATTRIBUTE_NAME + "'.");
+        }
+        try {
+          const TreeResource resource{std::string(resource_identity)};
+          absolute_path = resource.build_request_file_path_;
+          // The identity always carries a <tree_name> (a fully qualified tree resource identity requires it), so this
+          // yields the specific tree to cherry-pick rather than parsing the file for a root tree.
+          cherry_pick_tree_name = resource.getRootTreeName();
+        } catch (const std::exception & e) {
+          throw exceptions::TreeDocumentError(
+            "Cannot merge tree document: Found an <" + std::string(INCLUDE_ELEMENT_NAME) +
+            "> element that specifies the tree resource identity '" + std::string(resource_identity) +
+            "' in attribute '" + INCLUDE_RESOURCE_ATTRIBUTE_NAME + "' which cannot be resolved: " + e.what());
+        }
+      } else if (path) {
         if (std::string(path).empty()) {
           throw exceptions::TreeDocumentError(
             "Cannot merge tree document: Found an <" + std::string(INCLUDE_ELEMENT_NAME) +
             "> element that specifies an empty path in attribute '" + INCLUDE_PATH_ATTRIBUTE_NAME + "'.");
         }
-        std::string absolute_path = path;
+        absolute_path = path;
         if (const char * ros_pkg = include_ele->Attribute(INCLUDE_ROS_PKG_ATTRIBUTE_NAME)) {
           if (std::string(ros_pkg).empty()) {
             throw exceptions::TreeDocumentError(
@@ -778,19 +823,70 @@ TreeDocument & TreeDocument::mergeTreeDocumentImpl(
               INCLUDE_ROS_PKG_ATTRIBUTE_NAME + "'.");
           }
         }
-
-        // Recursively merge the included file to the buffer document, passing the include stack for circular detection
-        try {
-          include_doc.mergeFileImpl(absolute_path, false, include_stack);
-        } catch (const std::exception & e) {
-          throw exceptions::TreeDocumentError(
-            "Cannot merge tree document: Failed to include file '" + absolute_path + "': " + e.what());
-        }
       } else {
         throw exceptions::TreeDocumentError(
           "Cannot merge tree document: Found an <" + std::string(INCLUDE_ELEMENT_NAME) +
-          "> element that doesn't specify the required attribute '" + INCLUDE_PATH_ATTRIBUTE_NAME + "'.");
+          "> element that doesn't specify any of the required attributes '" + INCLUDE_PATH_ATTRIBUTE_NAME + "' or '" +
+          INCLUDE_RESOURCE_ATTRIBUTE_NAME + "'.");
       }
+
+      // Load the included file into a temporary working document (resolving its own nested includes and passing the
+      // include stack for circular detection). Both include kinds go through this same working document; a resource
+      // include additionally narrows it down to a single tree below.
+      TreeDocument work_doc(format_version_, tree_node_loader_ptr_);
+      try {
+        work_doc.mergeFileImpl(absolute_path, false, include_stack);
+      } catch (const std::exception & e) {
+        throw exceptions::TreeDocumentError(
+          "Cannot merge tree document: Failed to include file '" + absolute_path + "': " + e.what());
+      }
+
+      // For a resource include, cherry-pick: reduce the working document to the referenced tree and the trees it
+      // transitively depends on via <SubTree> nodes. A path include keeps the whole file (empty cherry_pick_tree_name).
+      if (!cherry_pick_tree_name.empty()) {
+        if (!work_doc.hasTreeName(cherry_pick_tree_name)) {
+          throw exceptions::TreeDocumentError(
+            "Cannot merge tree document: The tree resource '" + std::string(resource_identity) + "' refers to tree '" +
+            cherry_pick_tree_name + "' which is not defined in file '" + absolute_path + "'.");
+        }
+
+        // Compute the dependency closure of the referenced tree. References to trees not defined in this file are left
+        // out, so they can be resolved by the including document or another include.
+        std::set<std::string> required_tree_names;
+        std::vector<std::string> pending{cherry_pick_tree_name};
+        while (!pending.empty()) {
+          const std::string current = pending.back();
+          pending.pop_back();
+          if (!work_doc.hasTreeName(current)) continue;               // resolved elsewhere
+          if (!required_tree_names.insert(current).second) continue;  // already visited
+          std::function<void(const XMLElement *)> collect_subtree_refs = [&](const XMLElement * ele) {
+            for (const XMLElement * child = ele->FirstChildElement(); child != nullptr;
+                 child = child->NextSiblingElement()) {
+              if (strcmp(child->Name(), SUBTREE_ELEMENT_NAME) == 0) {
+                if (const char * ref = child->Attribute(TREE_NAME_ATTRIBUTE_NAME)) pending.push_back(ref);
+              }
+              collect_subtree_refs(child);
+            }
+          };
+          collect_subtree_refs(work_doc.getXMLElementForTreeWithName(current));
+        }
+
+        for (const std::string & name : work_doc.getAllTreeNames()) {
+          if (required_tree_names.count(name) == 0) work_doc.removeTree(name);
+        }
+      }
+
+      // Merge the working document into the buffer. A tree that already exists in the buffer with identical content is
+      // dropped beforehand (this lets several includes share a common helper subtree - e.g. two behaviors reusing the
+      // same subtree); a same-named tree with differing content is left in place so the merge below reports the clash.
+      for (const std::string & name : work_doc.getAllTreeNames()) {
+        if (
+          include_doc.hasTreeName(name) &&
+          include_doc.getTree(name).writeToString() == work_doc.getTree(name).writeToString()) {
+          work_doc.removeTree(name);
+        }
+      }
+      include_doc.mergeTreeDocument(static_cast<const XMLDocument &>(work_doc), false);
     }
 
     // Check for duplicates from included files before inserting
@@ -848,9 +944,15 @@ TreeDocument & TreeDocument::mergeTreeDocumentImpl(
   return *this;
 }
 
-TreeDocument & TreeDocument::mergeTreeDocument(const TreeDocument & other, bool adopt_root_tree)
+TreeDocument & TreeDocument::mergeTreeDocument(
+  const TreeDocument & other, bool adopt_root_tree, bool auto_register_nodes)
 {
-  registerNodes(other.getRequiredNodeManifest(), false);
+  if (auto_register_nodes) {
+    // We register all associated node plugins beforehand, so that the user doesn't have to do that manually. This
+    // means, that also potentially unused nodes are available and registered with the factory. This seems unnecessary,
+    // but it's very convenient and the performance probably doesn't suffer too much.
+    registerNodes(other.getRequiredNodeManifest(), false);
+  }
   std::set<std::string> include_stack;
   return mergeTreeDocumentImpl(static_cast<const XMLDocument &>(other), adopt_root_tree, include_stack);
 }
@@ -905,17 +1007,28 @@ TreeDocument & TreeDocument::mergeFileImpl(
   return *this;
 }
 
-TreeDocument & TreeDocument::mergeResource(const TreeResource & resource, bool adopt_root_tree)
+TreeDocument & TreeDocument::mergeResource(
+  const TreeResource & resource, bool adopt_root_tree, bool auto_register_nodes)
 {
-  registerNodes(resource.getNodeManifest(), false);
+  if (auto_register_nodes) {
+    // We register all associated node plugins beforehand, so that the user doesn't have to do that manually. This
+    // means, that also potentially unused nodes are available and registered with the factory. This seems unnecessary,
+    // but it's very convenient and the performance probably doesn't suffer too much.
+    registerNodes(resource.getNodeManifest(), false);
+  }
   return mergeFile(resource.build_request_file_path_, adopt_root_tree);
 }
 
-TreeDocument & TreeDocument::mergeTree(const TreeElement & tree, bool make_root_tree)
+TreeDocument & TreeDocument::mergeTree(const TreeElement & tree, bool make_root_tree, bool auto_register_nodes)
 {
   XMLDocument tree_doc;
   tree_doc.InsertEndChild(tree.ele_ptr_->DeepClone(&tree_doc));
-  registerNodes(tree.getRequiredNodeManifest(), false);
+  if (auto_register_nodes) {
+    // We register all associated node plugins beforehand, so that the user doesn't have to do that manually. This
+    // means, that also potentially unused nodes are available and registered with the factory. This seems unnecessary,
+    // but it's very convenient and the performance probably doesn't suffer too much.
+    registerNodes(tree.getRequiredNodeManifest(), false);
+  }
   mergeTreeDocument(tree_doc, make_root_tree);
   return *this;
 }
@@ -934,12 +1047,13 @@ TreeDocument::TreeElement TreeDocument::newTree(const std::string & tree_name)
   return TreeElement(this, new_ele);
 }
 
-TreeDocument::TreeElement TreeDocument::newTree(const TreeElement & other_tree)
+TreeDocument::TreeElement TreeDocument::newTree(const TreeElement & other, bool auto_register_nodes)
 {
-  return mergeTree(other_tree).getTree(other_tree.getName());
+  return mergeTree(other, false, auto_register_nodes).getTree(other.getName());
 }
 
-TreeDocument::TreeElement TreeDocument::newTreeFromDocument(const TreeDocument & other, const std::string & tree_name)
+TreeDocument::TreeElement TreeDocument::newTreeFromDocument(
+  const TreeDocument & other, const std::string & tree_name, bool auto_register_nodes)
 {
   std::string name(tree_name);
   if (name.empty()) {
@@ -954,7 +1068,7 @@ TreeDocument::TreeElement TreeDocument::newTreeFromDocument(const TreeDocument &
     }
   }
   TreeElement tree_ele = newTree(name);
-  tree_ele.insertTreeFromDocument(other, name);
+  tree_ele.insertTreeFromDocument(other, name, nullptr, auto_register_nodes);
   return tree_ele;
 }
 
@@ -962,24 +1076,29 @@ TreeDocument::TreeElement TreeDocument::newTreeFromString(const std::string & tr
 {
   TreeDocument new_doc(format_version_, tree_node_loader_ptr_);
   new_doc.mergeString(tree_str, true);
-  return newTreeFromDocument(new_doc, tree_name);
+  return newTreeFromDocument(new_doc, tree_name, false);
 }
 
 TreeDocument::TreeElement TreeDocument::newTreeFromFile(const std::string & path, const std::string & tree_name)
 {
   TreeDocument new_doc(format_version_, tree_node_loader_ptr_);
   new_doc.mergeFile(path, true);
-  return newTreeFromDocument(new_doc, tree_name);
+  return newTreeFromDocument(new_doc, tree_name, false);
 }
 
 TreeDocument::TreeElement TreeDocument::newTreeFromResource(
-  const TreeResource & resource, const std::string & tree_name)
+  const TreeResource & resource, const std::string & tree_name, bool auto_register_nodes)
 {
   TreeDocument new_doc(format_version_, tree_node_loader_ptr_);
   new_doc.mergeFile(resource.build_request_file_path_);
   if (resource.hasRootTreeName()) new_doc.setRootTreeName(resource.getRootTreeName());
-  registerNodes(resource.getNodeManifest(), false);
-  return newTreeFromDocument(new_doc, tree_name);
+  if (auto_register_nodes) {
+    // We register all associated node plugins beforehand, so that the user doesn't have to do that manually. This
+    // means, that also potentially unused nodes are available and registered with the factory. This seems unnecessary,
+    // but it's very convenient and the performance probably doesn't suffer too much.
+    registerNodes(resource.getNodeManifest(), false);
+  }
+  return newTreeFromDocument(new_doc, tree_name, false);
 }
 
 bool TreeDocument::hasTreeName(const std::string & tree_name) const
@@ -1186,11 +1305,13 @@ std::set<std::string> TreeDocument::getRegisteredNodeNames(bool include_native) 
   return names;
 }
 
-NodeManifest TreeDocument::getRequiredNodeManifest() const
+NodeManifest TreeDocument::getRequiredNodeManifest(const std::string & tree_name) const
 {
   NodeManifest m;
   TreeDocument * doc = const_cast<TreeDocument *>(this);
-  for (const std::string & tree_name : getAllTreeNames()) {
+  std::vector<std::string> tree_names_to_process =
+    tree_name.empty() ? getAllTreeNames() : std::vector<std::string>{tree_name};
+  for (const std::string & tree_name : tree_names_to_process) {
     XMLElement * ptr = const_cast<XMLElement *>(getXMLElementForTreeWithName(tree_name));
     const TreeElement ele(doc, ptr);
     m.merge(ele.getRequiredNodeManifest(), true);
@@ -1396,21 +1517,24 @@ BT::Result TreeDocument::verify() const
   return {};
 }
 
-std::string TreeDocument::writeToString() const
+std::string TreeDocument::writeToString(bool remove_whitespace) const
 {
-  tinyxml2::XMLPrinter printer;
+  tinyxml2::XMLPrinter printer(nullptr, remove_whitespace);
   Print(&printer);
   return printer.CStr();
 }
 
-void TreeDocument::writeToFile(const std::string & path) const
+void TreeDocument::writeToFile(const std::string & path, bool remove_whitespace) const
 {
-  XMLDocument doc;
-  DeepCopy(&doc);
-  tinyxml2::XMLError result = doc.SaveFile(path.c_str());
-  if (result != tinyxml2::XML_SUCCESS) {
-    throw exceptions::TreeDocumentError(
-      "Failed to write tree document to file. Error ID: " + std::string(doc.ErrorIDToName(result)));
+  const std::string xml = writeToString(remove_whitespace);
+  FILE * f = std::fopen(path.c_str(), "w");
+  if (!f) {
+    throw exceptions::TreeDocumentError("Failed to open file for writing: " + path);
+  }
+  const std::size_t written = std::fwrite(xml.data(), 1, xml.size(), f);
+  const int close_err = std::fclose(f);
+  if (written != xml.size() || close_err != 0) {
+    throw exceptions::TreeDocumentError("Failed to write tree document to file: " + path);
   }
 }
 
