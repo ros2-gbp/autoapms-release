@@ -1,3 +1,33 @@
+## autoapms (jazzy) - 1.7.0-1
+
+The packages in the `autoapms` repository were released into the `jazzy` distro by running `/usr/bin/bloom-release --rosdistro jazzy autoapms` on `Fri, 16 Oct 2026 20:03:52 -0000`
+
+These packages were released:
+- `auto_apms_behavior_tree`
+- `auto_apms_behavior_tree_core`
+- `auto_apms_examples`
+- `auto_apms_interfaces`
+- `auto_apms_mission`
+- `auto_apms_ros2behavior`
+- `auto_apms_util`
+
+Version of package(s) in repository `autoapms`:
+
+- upstream repository: https://github.com/AutoAPMS/auto-apms.git
+- release repository: https://github.com/ros2-gbp/autoapms-release.git
+- rosdistro version: `1.6.0-1`
+- old version: `1.6.0-1`
+- new version: `1.7.0-1`
+
+Versions of tools used:
+
+- bloom version: `0.14.4`
+- catkin_pkg version: `1.1.1`
+- rosdep version: `0.27.0`
+- rosdistro version: `1.1.0`
+- vcstools version: `0.1.42`
+
+
 ## autoapms (rolling) - 1.6.0-1
 
 The packages in the `autoapms` repository were released into the `rolling` distro by running `/usr/bin/bloom-release --rosdistro rolling autoapms` on `Fri, 16 Oct 2026 06:42:27 -0000`
