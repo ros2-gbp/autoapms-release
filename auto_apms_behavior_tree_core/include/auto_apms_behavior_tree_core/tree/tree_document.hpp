@@ -156,6 +156,7 @@ public:
   static inline const char INCLUDE_ELEMENT_NAME[] = "include";
   static inline const char INCLUDE_PATH_ATTRIBUTE_NAME[] = "path";
   static inline const char INCLUDE_ROS_PKG_ATTRIBUTE_NAME[] = "ros_pkg";
+  static inline const char INCLUDE_RESOURCE_ATTRIBUTE_NAME[] = "autoapms";
 
   class TreeElement;
 
@@ -352,13 +353,18 @@ public:
      * @param tree Tree element to be concatenated.
      * @param before_this Pointer to an existing child node before which the first child of @p tree will be placed. If
      * `nullptr`, insert at the end.
+     * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p tree.
+     * If `false`, the user must ensure that all nodes found in @p tree are registered with this document before
+     * calling this method. Otherwise, the resulting tree document may be malformed and lead to errors when trying to
+     * create an instance of it.
      * @return Inserted node element representing the first child node of the concatenated tree.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p tree contains any nodes that are not
      * available with the currently configured node manifest.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p before_this is provided but not a child of
      * this node.
      */
-    NodeElement insertTree(const TreeElement & tree, const NodeElement * before_this = nullptr);
+    NodeElement insertTree(
+      const TreeElement & tree, const NodeElement * before_this = nullptr, bool auto_register_nodes = true);
 
     /**
      * @brief Concatenate a tree from a document and add its first child node to the children of this node.
@@ -370,6 +376,10 @@ public:
      * @param tree_name Name of the tree to be inserted.
      * @param before_this Pointer to an existing child node before which the first child of @p tree will be placed. If
      * `nullptr`, insert at the end.
+     * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p
+     * tree_name of @p doc. If `false`, the user must ensure that all required nodes are registered with this
+     * document before calling this method. Otherwise, the resulting tree document may be malformed and lead to errors
+     * when trying to create an instance of it.
      * @return Inserted node element representing the first child node of the concatenated tree.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p tree_name cannot be found in @p doc.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if the tree contains any nodes that are not
@@ -378,7 +388,8 @@ public:
      * this node.
      */
     NodeElement insertTreeFromDocument(
-      const TreeDocument & doc, const std::string & tree_name, const NodeElement * before_this = nullptr);
+      const TreeDocument & doc, const std::string & tree_name, const NodeElement * before_this = nullptr,
+      bool auto_register_nodes = true);
 
     /**
      * @brief Concatenate the root tree of a document and add its first child node to the children of this node.
@@ -390,6 +401,10 @@ public:
      * only.
      * @param before_this Pointer to an existing child node before which the first child of @p tree will be placed. If
      * `nullptr`, insert at the end.
+     * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p
+     * tree_name of @p doc. If `false`, the user must ensure that all required nodes are registered with this
+     * document before calling this method. Otherwise, the resulting tree document may be malformed and lead to errors
+     * when trying to create an instance of it.
      * @return Inserted node element representing the first child node of the concatenated tree.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p doc doesn't specify which tree is the root
      * tree.
@@ -398,7 +413,8 @@ public:
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p before_this is provided but not a child of
      * this node.
      */
-    NodeElement insertTreeFromDocument(const TreeDocument & doc, const NodeElement * before_this = nullptr);
+    NodeElement insertTreeFromDocument(
+      const TreeDocument & doc, const NodeElement * before_this = nullptr, bool auto_register_nodes = true);
 
     /**
      * @brief Concatenate a tree from a document created from a string and add its first child node to the children
@@ -506,13 +522,18 @@ public:
      * @param tree_name Name of the tree to be inserted.
      * @param before_this Pointer to an existing child node before which the first child of @p tree will be placed. If
      * `nullptr`, insert at the end.
+     * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p
+     * resource. If `false`, the user must ensure that all nodes found in @p resource are registered with this document
+     * before calling this method. Otherwise, the resulting tree document may be malformed and lead to errors when
+     * trying to create an instance of it.
      * @return Inserted node element representing the first child node of the concatenated tree.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p tree_name does not exist in the resource.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p before_this is provided but not a child of
      * this node.
      */
     NodeElement insertTreeFromResource(
-      const TreeResource & resource, const std::string & tree_name, const NodeElement * before_this = nullptr);
+      const TreeResource & resource, const std::string & tree_name, const NodeElement * before_this = nullptr,
+      bool auto_register_nodes = true);
 
     /**
      * @brief Concatenate the root tree of one of the installed package's behavior tree resources and add its first
@@ -534,13 +555,18 @@ public:
      * tree only.
      * @param before_this Pointer to an existing child node before which the first child of @p tree will be placed. If
      * `nullptr`, insert at the end.
+     * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p
+     * resource. If `false`, the user must ensure that all nodes found in @p resource are registered with this document
+     * before calling this method. Otherwise, the resulting tree document may be malformed and lead to errors when
+     * trying to create an instance of it.
      * @return Inserted node element representing the first child node of the concatenated tree.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if the tree resource doesn't specify which of the
      * registered trees is the root tree.
      * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p before_this is provided but not a child of
      * this node.
      */
-    NodeElement insertTreeFromResource(const TreeResource & resource, const NodeElement * before_this = nullptr);
+    NodeElement insertTreeFromResource(
+      const TreeResource & resource, const NodeElement * before_this = nullptr, bool auto_register_nodes = true);
 
     /**
      * @brief Determine whether any children have been given to this node.
@@ -958,9 +984,12 @@ public:
      *
      * In contrast to TreeDocument::writeToString, the resulting XML contains the tree element as its root element,
      * emphasizing the fact that this function returns an XML for a single behavior tree only.
+     * @param remove_whitespace If `true`, insignificant whitespace (indentation and newlines between elements) is
+     * omitted from the output, producing a compact single-line representation. If `false` (default), the output is
+     * pretty-printed with standard indentation.
      * @return String representing the behavior tree in XML format.
      */
-    std::string writeToString() const;
+    std::string writeToString(bool remove_whitespace = false) const;
 
     /**
      * This function is an exact reimplementation of NodeElement::removeFirstChild(const std::string &, const
@@ -1047,6 +1076,10 @@ public:
    * @param other Other tree document containing the trees to be merged.
    * @param adopt_root_tree Set to `true` if you additionally want to update this document's root tree name according to
    * @p other.
+   * @param auto_register_nodes Set to `true` if you want to automatically register all nodes found in @p other. If
+   * `false`, the user must ensure that all nodes found in @p other are registered with this document before calling
+   * this method. Otherwise, the resulting tree document may be malformed and lead to errors when trying to create an
+   * instance of it.
    * @return Modified tree document.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if any of the tree names found in @p other are
    * already taken by this document.
@@ -1054,7 +1087,8 @@ public:
    * format of this document.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if any of the trees inside @p other are malformed.
    */
-  TreeDocument & mergeTreeDocument(const TreeDocument & other, bool adopt_root_tree = false);
+  TreeDocument & mergeTreeDocument(
+    const TreeDocument & other, bool adopt_root_tree = false, bool auto_register_nodes = true);
 
   /**
    * @brief Create a tree document from a string and merge it with this one.
@@ -1122,6 +1156,10 @@ public:
    * @param resource Behavior tree resource that specifies the tree document to be merged.
    * @param adopt_root_tree Set to `true` if you additionally want to update this document's root tree name according to
    * @p resource.
+   * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p
+   * resource. If `false`, the user must ensure that all nodes found in @p resource are registered with
+   * this document before calling this method. Otherwise, the resulting tree document may be malformed and lead to
+   * errors when trying to create an instance of it.
    * @return Modified tree document.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if any of the tree names found under @p resource are
    * already taken by this document.
@@ -1132,7 +1170,8 @@ public:
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if the content of the XML associated with @p resource
    * cannot be interpreted.
    */
-  TreeDocument & mergeResource(const TreeResource & resource, bool adopt_root_tree = false);
+  TreeDocument & mergeResource(
+    const TreeResource & resource, bool adopt_root_tree = false, bool auto_register_nodes = true);
 
   /**
    * @brief Merge an existing behavior tree with this tree document.
@@ -1145,12 +1184,16 @@ public:
    * an error is raised since a document's tree names must be unique.
    * @param tree Tree element representing the tree to merge.
    * @param make_root_tree Set to `true` if you want to make @p tree the new root tree of this document.
+   * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p tree.
+   * If `false`, the user must ensure that all nodes found in @p tree are registered with this document before
+   * calling this method. Otherwise, the resulting tree document may be malformed and lead to errors when trying to
+   * create an instance of it.
    * @return Modified tree document.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if the tree's name already exists inside this
    * document.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if the tree is malformed.
    */
-  TreeDocument & mergeTree(const TreeElement & tree, bool make_root_tree = false);
+  TreeDocument & mergeTree(const TreeElement & tree, bool make_root_tree = false, bool auto_register_nodes = true);
 
   /**
    * @brief Create a new behavior tree inside this document.
@@ -1164,17 +1207,21 @@ public:
   /**
    * @brief Create a new behavior tree inside this document with the same content of another.
    *
-   * Before creating a new tree using @p other_tree, all required nodes are automatically registered with this document.
+   * Before creating a new tree using @p other, all required nodes are automatically registered with this document.
    *
    * This function is intended for copying a behavior tree from another tree document. If you call this with a
    * tree element that was created using this document or the other tree has the same name as one of the existing trees,
    * an error is raised since a document's tree names must be unique.
-   * @param other_tree Other behavior tree to be copied.
+   * @param other Other behavior tree to be copied.
+   * @param auto_register_nodes Set to `true` if you want to automatically register all nodes found in @p other. If
+   * `false`, the user must ensure that all nodes found in @p other are registered with this document before calling
+   * this method. Otherwise, the resulting tree document may be malformed and lead to errors when trying to create an
+   * instance of it.
    * @return Tree element representing the new behavior tree.
-   * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p other_tree has the same name as one of this
+   * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p other has the same name as one of this
    * document's trees.
    */
-  TreeElement newTree(const TreeElement & other_tree);
+  TreeElement newTree(const TreeElement & other, bool auto_register_nodes = true);
 
   /**
    * @brief Create a new behavior tree inside this document with the content of one found inside another tree document.
@@ -1184,6 +1231,10 @@ public:
    * considered the root tree.
    * @param other Other tree document that contains the tree to be copied.
    * @param tree_name Name of the tree to be copied. It must exist inside @p other.
+   * @param auto_register_nodes Set to `true` if you want to automatically register all nodes found in @p other. If
+   * `false`, the user must ensure that all nodes found in @p other are registered with this document before calling
+   * this method. Otherwise, the resulting tree document may be malformed and lead to errors when trying to create an
+   * instance of it.
    * @return Tree element representing the new behavior tree.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p tree_name is empty but @p other doesn't specify
    * which tree is the root tree.
@@ -1193,7 +1244,8 @@ public:
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if the respective tree contains any nodes that are
    * not available with the currently configured node manifest.
    */
-  TreeElement newTreeFromDocument(const TreeDocument & other, const std::string & tree_name = "");
+  TreeElement newTreeFromDocument(
+    const TreeDocument & other, const std::string & tree_name = "", bool auto_register_nodes = true);
 
   /**
    * @brief Create a new behavior tree inside this document with the content of one found inside the XML string.
@@ -1249,6 +1301,10 @@ public:
    * @param resource Behavior tree resource to use.
    * @param tree_name Name of the tree to be copied. It must exist inside the resource's tree document. By default the
    * root tree is used.
+   * @param auto_register_nodes Set to `true` if you want to automatically register all nodes associated with @p
+   * resource. If `false`, the user must ensure that all nodes found in @p resource are registered with this document
+   * before calling this method. Otherwise, the resulting tree document may be malformed and lead to errors when trying
+   * to create an instance of it.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p tree_name is empty but the root tree cannot be
    * determined.
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if @p tree_name cannot be found in the resource's
@@ -1256,7 +1312,8 @@ public:
    * @throw auto_apms_behavior_tree::exceptions::TreeDocumentError if a tree with name @p tree_name already exists
    * inside this document.
    */
-  TreeElement newTreeFromResource(const TreeResource & resource, const std::string & tree_name = "");
+  TreeElement newTreeFromResource(
+    const TreeResource & resource, const std::string & tree_name = "", bool auto_register_nodes = true);
 
   /**
    * @brief Determine if this document contains a behavior tree with a particular name.
@@ -1380,11 +1437,16 @@ public:
   /**
    * @brief Assemble the node manifest that is required for successfully creating an instance of any of the document's
    * trees.
+   * @param tree_name Optional name of the tree for which the required node manifest should be assembled. If left empty
+   * (default), all trees are considered and the required node manifest is determined by collecting an extensive list of
+   * nodes used by this document. This means that if there are multiple trees in this document but you only want to
+   * create an instance of one of them, you can specify which one it is to get a more precise node manifest that only
+   * contains the nodes that are actually required for this tree.
    * @return Node manifest which contains the registration options for all nodes inside this document.
    * @throw auto_apms_behavior_tree::exceptions::NodeManifestError if there are no registration options for a specific
    * node.
    */
-  NodeManifest getRequiredNodeManifest() const;
+  NodeManifest getRequiredNodeManifest(const std::string & tree_name = "") const;
 
   /**
    * @brief Add a behavior tree node model element to the document by parsing the contents of @p model_map.
@@ -1424,15 +1486,22 @@ public:
 
   /**
    * @brief Write the XML of this tree document to a string.
+   *
+   * @param remove_whitespace If `true`, insignificant whitespace (indentation and newlines between elements) is
+   * omitted from the output, producing a compact single-line representation.
    * @return String representing this document in XML format.
    */
-  std::string writeToString() const;
+  std::string writeToString(bool remove_whitespace = false) const;
 
   /**
    * @brief Write the XML of this tree document to a file.
+   *
    * @param path Path to the output file.
+   * @param remove_whitespace If `true`, insignificant whitespace (indentation and newlines between elements) is
+   * omitted from the output, producing a compact single-line file. If `false` (default), the file is
+   * pretty-printed with standard indentation.
    */
-  void writeToFile(const std::string & path) const;
+  void writeToFile(const std::string & path, bool remove_whitespace = false) const;
 
   /**
    * @brief Clear this document and reset it to its initial state.
