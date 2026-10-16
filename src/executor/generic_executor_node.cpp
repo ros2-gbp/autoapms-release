@@ -31,28 +31,30 @@ namespace auto_apms_behavior_tree
 GenericTreeExecutorNode::GenericTreeExecutorNode(rclcpp::Node::SharedPtr node_ptr, Options options)
 : TreeExecutorBase(node_ptr), executor_options_(options), executor_param_listener_(node_ptr_)
 {
-  // Remove all parameters from overrides that are not supported
-  rcl_interfaces::msg::ListParametersResult res = node_ptr_->list_parameters({}, 0);
-  std::vector<std::string> unknown_param_names;
-  for (const std::string & param_name : res.names) {
-    if (!stripPrefixFromParameterName(SCRIPTING_ENUM_PARAM_PREFIX, param_name).empty()) continue;
-    if (!stripPrefixFromParameterName(BLACKBOARD_PARAM_PREFIX, param_name).empty()) continue;
-    if (auto_apms_util::contains(TREE_EXECUTOR_EXPLICITLY_ALLOWED_PARAMETERS, param_name)) continue;
-    try {
-      node_ptr_->undeclare_parameter(param_name);
-    } catch (const rclcpp::exceptions::ParameterImmutableException & e) {
-      // Allow all builtin read only parameters
-      continue;
-    } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
-      // Allow all builtin statically typed parameters
-      continue;
+  if (executor_options_.strict_unkown_parameter_removal_) {
+    // Remove all parameters from overrides that are not supported.
+    rcl_interfaces::msg::ListParametersResult res = node_ptr_->list_parameters({}, 0);
+    std::vector<std::string> unknown_param_names;
+    for (const std::string & param_name : res.names) {
+      if (!stripPrefixFromParameterName(SCRIPTING_ENUM_PARAM_PREFIX, param_name).empty()) continue;
+      if (!stripPrefixFromParameterName(BLACKBOARD_PARAM_PREFIX, param_name).empty()) continue;
+      if (auto_apms_util::contains(TREE_EXECUTOR_EXPLICITLY_ALLOWED_PARAMETERS, param_name)) continue;
+      try {
+        node_ptr_->undeclare_parameter(param_name);
+      } catch (const rclcpp::exceptions::ParameterImmutableException & e) {
+        // Allow all builtin read only parameters.
+        continue;
+      } catch (const rclcpp::exceptions::InvalidParameterTypeException & e) {
+        // Allow all builtin statically typed parameters.
+        continue;
+      }
+      unknown_param_names.push_back(param_name);
     }
-    unknown_param_names.push_back(param_name);
-  }
-  if (!unknown_param_names.empty()) {
-    RCLCPP_WARN(
-      logger_, "The following initial parameters are not supported and have been removed: [ %s ].",
-      auto_apms_util::join(unknown_param_names, ", ").c_str());
+    if (!unknown_param_names.empty()) {
+      RCLCPP_WARN(
+        logger_, "The following initial parameters are not supported and have been removed: [ %s ].",
+        auto_apms_util::join(unknown_param_names, ", ").c_str());
+    }
   }
 
   // Set custom parameter default values.
@@ -188,6 +190,65 @@ std::shared_future<GenericTreeExecutorNode::ExecutionResult> GenericTreeExecutor
   const ExecutorParameters params = executor_param_listener_.get_params();
   return startExecution(
     makeTreeConstructor(build_request, entry_point, node_manifest), params.tick_rate, params.groot2_port);
+}
+
+bool GenericTreeExecutorNode::onTick()
+{
+  const ExecutorParameters params = executor_param_listener_.get_params();
+  getStateObserver().setLogging(params.state_change_logger);
+  return true;
+}
+
+bool GenericTreeExecutorNode::afterTick()
+{
+  const ExecutorParameters params = executor_param_listener_.get_params();
+
+  // Synchronize parameters with new blackboard entries if enabled
+  if (executor_options_.blackboard_parameters_dynamic_ && params.allow_dynamic_blackboard) {
+    TreeBlackboardSharedPtr bb_ptr = getGlobalBlackboardPtr();
+    std::vector<rclcpp::Parameter> new_parameters;
+    for (const BT::StringView & str : bb_ptr->getKeys()) {
+      const std::string key = std::string(str);
+      const BT::TypeInfo * type_info = bb_ptr->entryInfo(key);
+      const BT::Any * any = bb_ptr->getAnyLocked(key).get();
+
+      if (any->empty()) continue;
+
+      if (translated_global_blackboard_entries_.find(key) == translated_global_blackboard_entries_.end()) {
+        const BT::Expected<rclcpp::ParameterValue> expected =
+          createParameterValueFromAny(*any, rclcpp::PARAMETER_NOT_SET);
+        if (expected) {
+          new_parameters.push_back(rclcpp::Parameter(BLACKBOARD_PARAM_PREFIX + "." + key, expected.value()));
+          translated_global_blackboard_entries_[key] = expected.value();
+        } else {
+          RCLCPP_WARN(
+            logger_, "Failed to translate new blackboard entry '%s' (Type: %s) to parameters: %s", key.c_str(),
+            type_info->typeName().c_str(), expected.error().c_str());
+        }
+      } else {
+        const BT::Expected<rclcpp::ParameterValue> expected =
+          createParameterValueFromAny(*any, translated_global_blackboard_entries_[key].get_type());
+        if (expected) {
+          if (expected.value() != translated_global_blackboard_entries_[key]) {
+            new_parameters.push_back(rclcpp::Parameter(BLACKBOARD_PARAM_PREFIX + "." + key, expected.value()));
+          }
+        } else {
+          RCLCPP_WARN(
+            logger_, "Failed to translate blackboard entry '%s' (Type: %s) to parameters: %s", key.c_str(),
+            type_info->typeName().c_str(), expected.error().c_str());
+        }
+      }
+    }
+    if (!new_parameters.empty()) {
+      const rcl_interfaces::msg::SetParametersResult result = node_ptr_->set_parameters_atomically(new_parameters);
+      if (!result.successful) {
+        throw exceptions::TreeExecutorError(
+          "Unexpectedly failed to set parameters inferred from global blackboard. Reason: " + result.reason);
+      }
+    }
+  }
+
+  return true;
 }
 
 GenericTreeExecutorNode::ExecutorParameters GenericTreeExecutorNode::getExecutorParameters() const
@@ -428,6 +489,11 @@ rcl_interfaces::msg::SetParametersResult GenericTreeExecutorNode::on_set_paramet
 
     // Check if parameter is known
     if (!auto_apms_util::contains(TREE_EXECUTOR_EXPLICITLY_ALLOWED_PARAMETERS, param_name)) {
+      // Not a parameter managed by the executor. When strict removal is disabled, the executor is embedded in a node
+      // that intentionally declares its own additional parameters (see
+      // TreeExecutorNodeOptions::enableStrictUnkownParameterRemoval), so leave those foreign parameters untouched
+      // instead of rejecting them. Otherwise the executor owns the full parameter set and an unknown name is an error.
+      if (!executor_options_.strict_unkown_parameter_removal_) continue;
       return create_rejected("Parameter is unknown");
     }
 
@@ -603,65 +669,6 @@ void GenericTreeExecutorNode::handle_command_accept_(std::shared_ptr<CommandActi
       goal_handle_ptr->succeed(action_result_ptr);
       command_timer_ptr_->cancel();
     });
-}
-
-bool GenericTreeExecutorNode::onTick()
-{
-  const ExecutorParameters params = executor_param_listener_.get_params();
-  getStateObserver().setLogging(params.state_change_logger);
-  return true;
-}
-
-bool GenericTreeExecutorNode::afterTick()
-{
-  const ExecutorParameters params = executor_param_listener_.get_params();
-
-  // Synchronize parameters with new blackboard entries if enabled
-  if (executor_options_.blackboard_parameters_dynamic_ && params.allow_dynamic_blackboard) {
-    TreeBlackboardSharedPtr bb_ptr = getGlobalBlackboardPtr();
-    std::vector<rclcpp::Parameter> new_parameters;
-    for (const BT::StringView & str : bb_ptr->getKeys()) {
-      const std::string key = std::string(str);
-      const BT::TypeInfo * type_info = bb_ptr->entryInfo(key);
-      const BT::Any * any = bb_ptr->getAnyLocked(key).get();
-
-      if (any->empty()) continue;
-
-      if (translated_global_blackboard_entries_.find(key) == translated_global_blackboard_entries_.end()) {
-        const BT::Expected<rclcpp::ParameterValue> expected =
-          createParameterValueFromAny(*any, rclcpp::PARAMETER_NOT_SET);
-        if (expected) {
-          new_parameters.push_back(rclcpp::Parameter(BLACKBOARD_PARAM_PREFIX + "." + key, expected.value()));
-          translated_global_blackboard_entries_[key] = expected.value();
-        } else {
-          RCLCPP_WARN(
-            logger_, "Failed to translate new blackboard entry '%s' (Type: %s) to parameters: %s", key.c_str(),
-            type_info->typeName().c_str(), expected.error().c_str());
-        }
-      } else {
-        const BT::Expected<rclcpp::ParameterValue> expected =
-          createParameterValueFromAny(*any, translated_global_blackboard_entries_[key].get_type());
-        if (expected) {
-          if (expected.value() != translated_global_blackboard_entries_[key]) {
-            new_parameters.push_back(rclcpp::Parameter(BLACKBOARD_PARAM_PREFIX + "." + key, expected.value()));
-          }
-        } else {
-          RCLCPP_WARN(
-            logger_, "Failed to translate blackboard entry '%s' (Type: %s) to parameters: %s", key.c_str(),
-            type_info->typeName().c_str(), expected.error().c_str());
-        }
-      }
-    }
-    if (!new_parameters.empty()) {
-      const rcl_interfaces::msg::SetParametersResult result = node_ptr_->set_parameters_atomically(new_parameters);
-      if (!result.successful) {
-        throw exceptions::TreeExecutorError(
-          "Unexpectedly failed to set parameters inferred from global blackboard. Reason: " + result.reason);
-      }
-    }
-  }
-
-  return true;
 }
 
 }  // namespace auto_apms_behavior_tree
