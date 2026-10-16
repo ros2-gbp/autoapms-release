@@ -2,6 +2,9 @@
 Changelog for package auto_apms_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.7.0 (2026-10-16)
+------------------
+
 1.6.0 (2026-10-16)
 ------------------
 * add SetBehavior service
