@@ -81,7 +81,7 @@ class RunVerb(VerbExtension):
             "--blackboard",
             nargs="*",
             metavar="key:=value",
-            help="Blackboard variables to pass to the behavior tree",
+            help="Global blackboard variables to pass to the behavior tree",
             default=[],
         )
         parser.add_argument(
@@ -108,6 +108,12 @@ class RunVerb(VerbExtension):
             metavar=logging_level_names,
         )
         logging_arg.completer = PrefixFilteredChoicesCompleter(logging_level_names)
+        parser.add_argument(
+            "--namespace",
+            "-n",
+            type=str,
+            help="ROS 2 node namespace for the executor",
+        )
 
     def main(self, *, args):
         """Main function for the run verb."""
@@ -151,4 +157,5 @@ class RunVerb(VerbExtension):
             static_params=static_params,
             blackboard_params=blackboard_params,
             logging_level=args.logging,
+            namespace=args.namespace,
         )
